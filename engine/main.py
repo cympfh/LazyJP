@@ -221,10 +221,18 @@ def cli():
 @click.option("--style", default="casual", show_default=True)
 @click.option("--languages", default="ja,en,zh", show_default=True, help="カンマ区切り")
 @click.option("--context", multiple=True, help="直前の変換結果（複数回指定可）")
-def convert(style: str, languages: str, context: tuple[str, ...]):
+@click.option("--verbose", "-v", is_flag=True, default=False, help="詳細ログを stderr に出力")
+def convert(style: str, languages: str, context: tuple[str, ...], verbose: bool):
     """input_text を stdin から読み取り、変換結果を stdout に出力する。"""
+    def log(msg: str):
+        if verbose:
+            click.echo(f"[lazyjp] {msg}", err=True)
+
     input_text = sys.stdin.read()
     lang_list = [lang.strip() for lang in languages.split(",") if lang.strip()]
+
+    log(f"input: {input_text.strip()!r}")
+    log(f"style: {style}, languages: {lang_list}, context: {list(context)}")
 
     if not input_text.strip():
         click.echo(input_text, nl=False)
@@ -238,17 +246,21 @@ def convert(style: str, languages: str, context: tuple[str, ...]):
     cached = cache_get(db, key)
     if cached is not None:
         db.close()
+        log(f"cache hit => {cached!r}")
         click.echo(cached)
         return
 
+    log("cache miss, calling LLM...")
     try:
         llm_config = _load_llm_config()
+        log(f"llm config: {llm_config.get('provider')}/{llm_config.get('model')}")
         result = _llm_convert(input_text, style, lang_list, list(context), llm_config)
     except Exception as e:
         db.close()
         click.echo(f"LLM error: {e}", err=True)
         sys.exit(1)
 
+    log(f"result: {result!r}")
     cache_set(db, key, input_text.strip(), sh, lang_decl, result)
     db.close()
     click.echo(result)

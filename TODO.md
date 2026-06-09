@@ -53,3 +53,15 @@ litellm の使いかたを知るためにまず ~/bin/translate を読む
 - `lazyjp convert`: stdin JSON → stdout JSON
 - DB パスを `~/.cache/lazyjp/cache.db` に変更
 - nvim プラグインは `M.config.cmd = "lazyjp"` で呼び出す
+
+## [x] Ctrl-m はやっぱりやめて Ctrl-j にする [2026-06-09 完了]
+
+実装からもドキュメントからも変更
+`lua/lazyjp/init.lua`・`README.md`・`CLAUDE.md` の `<C-m>`/`Ctrl+m` を `<C-j>`/`Ctrl+j` に置換。
+
+## [x] :LazyjpInfo コマンドを用意する [2026-06-09 完了]
+
+最初に engine/main.py --verbose を用意して、stderr にたくさん log を出す。
+次に log 全部確認できるようにする
+`M.info()` 実装・`M.setup()` で `:LazyjpInfo` コマンド登録。変換リクエスト・結果・キャンセル・エラーをプラグイン内ログに記録し floating window（`q` で閉じる）で表示。
+

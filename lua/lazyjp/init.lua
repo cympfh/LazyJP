@@ -1,13 +1,24 @@
 local M = {}
 
+local _plugin_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+
 M.config = {
-  cmd = "lazyjp",
+  cmd = { "python", _plugin_dir .. "/engine/main.py" },
   style = "casual",
   languages = { "ja", "en", "zh" },
+  verbose = false,
 }
 
 -- pending[bufnr][lnum] = {hash, text}
 local pending = {}
+
+-- log entries
+local logs = {}
+
+local function log_append(msg)
+  local ts = os.date("%H:%M:%S")
+  table.insert(logs, string.format("[%s] %s", ts, msg))
+end
 
 local function line_hash(text)
   return vim.fn.sha256(text)
@@ -35,36 +46,46 @@ end
 local function on_convert_result(bufnr, lnum, original_hash, result_text)
   local p = pending[bufnr] and pending[bufnr][lnum]
   if not p or p.hash ~= original_hash then
+    log_append(string.format("cancel lnum=%d (hash mismatch or already done)", lnum))
     return
   end
   cancel_pending(bufnr, lnum)
 
   local current = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
   if not current or line_hash(current) ~= original_hash then
+    log_append(string.format("cancel lnum=%d (line edited)", lnum))
     return
   end
 
   vim.api.nvim_buf_set_lines(bufnr, lnum - 1, lnum, false, { result_text })
   push_context(bufnr, result_text)
+  log_append(string.format("converted lnum=%d => %s", lnum, result_text))
 end
 
 local function send_to_engine(bufnr, lnum, text)
   local hash = line_hash(text)
   pending[bufnr] = pending[bufnr] or {}
   pending[bufnr][lnum] = { hash = hash, text = text }
+  log_append(string.format("request lnum=%d: %s", lnum, text))
 
-  local cmd = {
-    M.config.cmd, "convert",
-    "--style", M.config.style,
-    "--languages", table.concat(M.config.languages, ","),
-  }
+  local cmd = {}
+  for _, v in ipairs(M.config.cmd) do
+    table.insert(cmd, v)
+  end
+  table.insert(cmd, "convert")
+  table.insert(cmd, "--style")
+  table.insert(cmd, M.config.style)
+  table.insert(cmd, "--languages")
+  table.insert(cmd, table.concat(M.config.languages, ","))
+  if M.config.verbose then
+    table.insert(cmd, "--verbose")
+  end
   for _, ctx in ipairs(get_context(bufnr)) do
     table.insert(cmd, "--context")
     table.insert(cmd, ctx)
   end
 
-  vim.fn.jobstart(cmd, {
-    stdin = text,
+  local job_id = vim.fn.jobstart(cmd, {
     stdout_buffered = true,
     on_stdout = function(_, data)
       local result = table.concat(data, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
@@ -77,11 +98,14 @@ local function send_to_engine(bufnr, lnum, text)
       local msg = table.concat(data, "")
       if msg ~= "" then
         vim.schedule(function()
+          log_append(string.format("engine error: %s", msg))
           vim.notify("[LazyJP] engine error: " .. msg, vim.log.levels.ERROR)
         end)
       end
     end,
   })
+  vim.fn.chansend(job_id, text .. "\n")
+  vim.fn.chanclose(job_id, "stdin")
 end
 
 function M.trigger()
@@ -115,6 +139,32 @@ local function watch_changes(bufnr)
   })
 end
 
+function M.info()
+  local lines = vim.list_extend({ "LazyJP log:" }, logs)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+
+  local width = math.min(math.max(60, vim.o.columns - 10), vim.o.columns - 4)
+  local height = math.min(#lines + 1, vim.o.lines - 6)
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "rounded",
+    title = " LazyJP Info ",
+    title_pos = "center",
+  })
+  vim.wo[win].wrap = false
+  vim.keymap.set("n", "q", "<cmd>close<CR>", { buffer = buf, silent = true })
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
@@ -124,7 +174,8 @@ function M.setup(opts)
     end,
   })
 
-  vim.keymap.set("i", "<C-m>", M.trigger, { desc = "LazyJP: convert current line" })
+  vim.keymap.set("i", "<C-j>", M.trigger, { desc = "LazyJP: convert current line" })
+  vim.api.nvim_create_user_command("LazyjpInfo", function() M.info() end, { desc = "LazyJP: show log" })
 end
 
 return M
