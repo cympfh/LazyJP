@@ -12,27 +12,38 @@
 ## 構成
 
 ```
-engine/   FastAPI 変換エンジン（Python）
+engine/   CLI 変換エンジン（Python + Click）
 lua/      Neovim プラグイン（Lua）
 ```
 
 ## セットアップ
 
-### エンジンの起動
+### エンジンのインストール
 
 ```sh
 cd engine
 pip install -r requirements.txt
-uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-環境変数でモデルを設定する（LiteLLM 経由で任意のプロバイダを使用可能）：
+LLM プロバイダの設定は `llm-config` コマンド経由で行う（LiteLLM 対応の任意プロバイダが使用可能）。
+
+### CLI コマンド
 
 ```sh
-export OPENAI_API_KEY=sk-...
-# または
-export ANTHROPIC_API_KEY=sk-ant-...
+# 変換（input_text は stdin から）
+echo "kyou ha ii tenki desune" | lazyjp convert
+
+# オプション
+echo "..." | lazyjp convert --style formal --languages ja,en
+
+# キャッシュ削除
+lazyjp clear
+
+# バージョン確認
+lazyjp version
 ```
+
+キャッシュは `~/.cache/lazyjp/cache.db`（SQLite）に無期限永続化される。同一入力は LLM を呼ばず即座に返す。
 
 ### Neovim プラグインのインストール
 
@@ -43,9 +54,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
   "cympfh/LazyJP",
   config = function()
     require("lazyjp").setup({
-      engine_url = "http://localhost:8000",  -- default
-      style = "casual",                      -- casual / formal
-      languages = { "ja" },                  -- ja / zh / en
+      cmd = "lazyjp",       -- default: CLI コマンドのパス
+      style = "casual",     -- casual / formal
+      languages = { "ja", "en", "zh" },
     })
   end,
 }
@@ -57,7 +68,6 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```lua
 require("lazyjp").setup({})
--- デフォルトキーマップを上書き
 vim.keymap.set("i", "<C-j>", function()
   require("lazyjp").trigger()
 end)
@@ -67,30 +77,8 @@ end)
 
 1. Insert モードで `Ctrl+m` を押す
 2. 現在行が空 → 通常の改行のみ
-3. 現在行に内容あり → エンジンに非同期送信 + 改行挿入
-4. エンジンが変換結果を返す → ローマ字行を日本語に置き換え
+3. 現在行に内容あり → `lazyjp convert` を非同期起動（stdin にテキストを渡す）+ 改行挿入
+4. 変換結果が返ってきたら行が未編集であればローマ字行を日本語に置き換え
 5. 行を編集した場合 → 変換はキャンセルされ、ローマ字のまま残る
 
-コンテキストとして直前2つの変換済み結果がエンジンに渡されるため、文章の流れを維持した変換が行われる。
-
-## エンジン API
-
-### POST /convert
-
-```json
-{
-  "input_text": "knnchw、nh",
-  "style": "casual",
-  "languages": ["ja"],
-  "context": ["前の文1", "前の文2"]
-}
-```
-
-```json
-{
-  "result_text": "こんにちは、你好",
-  "cached": false
-}
-```
-
-キャッシュは SQLite に無期限永続化される。同一入力は LLM を呼ばず即座に返す。
+コンテキストとして直前2つの変換済み結果が `--context` オプションで渡されるため、文章の流れを維持した変換が行われる。
