@@ -8,6 +8,8 @@ import sys
 import click
 from litellm import completion
 
+__version__ = "0.1.0"
+
 # ---- LLM config ----
 
 
@@ -126,21 +128,26 @@ def _build_system_prompt(style: str, languages: list[str]) -> str:
 
 入力: wo jintian hen lei
 出力: 我今天很累
-
-入力: ashitahayakuokitemiru
-出力: 明日早く起きてみる
+NOTE: 翻訳はしない。中国語は中国語
 
 入力: kyou ha ii tenki desune
 出力: 今日はいい天気ですね
 
+入力: ashitahayakuokitemiru
+出力: 明日早く起きてみる
+NOTE: ローマ字は日本語。スペースがあるとは限らない
+
 入力: errorga detanode debugshitemiru
 出力: error が出たので debug してみる
+NOTE: 英語が混ざることもある。英文と和文の間にはスペースがあると望ましい
 
 入力: kono function ha input wo return suru
 出力: この function は input を return する
+NOTE: 英語が混ざることもある。英文と和文の間にはスペースがあると望ましい
 
 入力: kono lanzhou lamian ha oishikatta,matakonoomiseni koyou
 出力: この兰州拉面はおいしかった、またこのお店に来よう
+NOTE: 中国語の固有名詞は簡体字で補完する
 
 入力: kino no meeting ha muzukashikatta, demo ii idea ga deta
 出力: 昨日の meeting は難しかったけど、いい idea が出た
@@ -245,6 +252,22 @@ def convert(style: str, languages: str, context: tuple[str, ...]):
     cache_set(db, key, input_text.strip(), sh, lang_decl, result)
     db.close()
     click.echo(result)
+
+
+@cli.command()
+def version():
+    """バージョンを表示する。"""
+    click.echo(__version__)
+
+
+@cli.command()
+def clear():
+    """キャッシュ DB を削除する。"""
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+        click.echo(f"Removed: {DB_PATH}")
+    else:
+        click.echo(f"Not found: {DB_PATH}")
 
 
 if __name__ == "__main__":
