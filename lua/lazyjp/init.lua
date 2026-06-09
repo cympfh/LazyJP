@@ -110,14 +110,24 @@ end
 
 function M.trigger()
   local bufnr = vim.api.nvim_get_current_buf()
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local lnum = cursor[1]
+  local col = cursor[2]  -- 0-indexed byte offset
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1] or ""
 
-  vim.api.nvim_feedkeys(
-    vim.api.nvim_replace_termcodes("<CR>", true, false, true),
-    "n",
-    false
-  )
+  if col >= #line then
+    vim.api.nvim_feedkeys(
+      vim.api.nvim_replace_termcodes("<CR>", true, false, true),
+      "n",
+      false
+    )
+  else
+    vim.api.nvim_feedkeys(
+      vim.api.nvim_replace_termcodes("<Down>", true, false, true),
+      "n",
+      false
+    )
+  end
 
   if line ~= "" then
     send_to_engine(bufnr, lnum, line)

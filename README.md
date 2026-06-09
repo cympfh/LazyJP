@@ -1,15 +1,34 @@
-# LazyJP
+# LazyJP.nvim
 
-思考を中断させない日本語入力。ローマ字のまま書き続けると、AI が文脈を読んで非同期に日本語へ変換する。
+日本語入力エンジン。ローマ字のまま書き続けると、AI が文脈を読んで非同期に日本語へ変換する。
 
-## 概要
+![](spec/demo.gif)
 
-- ローマ字（またはピンイン混在）でタイプし続ける
+## 特徴
+
+- ローマ字（または英語または拼音混在可）でタイプし続ける
 - `Ctrl+j` でトリガー：現在行をバックグラウンドでエンジンに送信 → 改行して次の入力を継続
 - 変換結果が返ってきたら自動的にローマ字行が日本語に置き換わる
 - その間もユーザーは次の行をタイプし続けられる
 
 ## インストール
+
+### Neovim プラグイン
+
+```bash
+git clone https://github.com/cympfh/LazyJP ~/.local/share/nvim/site/pack/lazyjp/start/LazyJP
+```
+
+`init.lua` に設定を追加：
+
+```lua
+require("lazyjp").setup({
+  style = "casual",
+  languages = { "ja", "en", "zh" },
+})
+```
+
+### Neovim プラグイン（lazy.nvim）
 
 [lazy.nvim](https://github.com/folke/lazy.nvim) を使っている場合：
 

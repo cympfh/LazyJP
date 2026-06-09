@@ -202,7 +202,7 @@ def _llm_convert(
     cfg = llm_config
     model = f"{cfg['provider']}/{cfg['model']}"
     extra: dict = {}
-    if cfg.get("reasoning_effort") and cfg["reasoning_effort"] != "none":
+    if cfg.get("reasoning_effort"):
         extra["reasoning_effort"] = cfg["reasoning_effort"]
 
     result = completion(model=model, messages=messages, **extra)
@@ -221,9 +221,12 @@ def cli():
 @click.option("--style", default="casual", show_default=True)
 @click.option("--languages", default="ja,en,zh", show_default=True, help="カンマ区切り")
 @click.option("--context", multiple=True, help="直前の変換結果（複数回指定可）")
-@click.option("--verbose", "-v", is_flag=True, default=False, help="詳細ログを stderr に出力")
+@click.option(
+    "--verbose", "-v", is_flag=True, default=False, help="詳細ログを stderr に出力"
+)
 def convert(style: str, languages: str, context: tuple[str, ...], verbose: bool):
     """input_text を stdin から読み取り、変換結果を stdout に出力する。"""
+
     def log(msg: str):
         if verbose:
             click.echo(f"[lazyjp] {msg}", err=True)
