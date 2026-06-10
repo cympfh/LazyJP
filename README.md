@@ -25,6 +25,7 @@ git clone https://github.com/cympfh/LazyJP ~/.local/share/nvim/site/pack/lazyjp/
 require("lazyjp").setup({
   style = "casual",
   languages = { "ja", "en", "zh" },
+  keymap = "<C-k>",
 })
 ```
 
@@ -37,22 +38,24 @@ require("lazyjp").setup({
   "cympfh/LazyJP",
   config = function()
     require("lazyjp").setup({
-      style = "casual",     -- casual / formal
+      style = "casual",
       languages = { "ja", "en", "zh" },
+      keymap = "<C-k>",
     })
   end,
 }
 ```
 
-### キーマップのカスタマイズ
+### 設定オプション
 
-デフォルトのトリガーは `Ctrl+j`（Insert モード）。変更したい場合：
-
-```lua
-require("lazyjp").setup({
-  keymap = "<C-k>",  -- デフォルトは "<C-j>"
-})
-```
+| オプション | デフォルト | 説明 |
+|---|---|---|
+| `style` | `"casual"` | 変換スタイル（`"casual"` / `"formal"`） |
+| `languages` | `{ "ja", "en", "zh" }` | 対象言語 |
+| `keymap` | `"<C-j>"` | トリガーキー（Insert モード） |
+| `num_contexts` | `2` | コンテキストとして渡す直前の変換結果の数 |
+| `reasoning_effort` | `nil` | 推論レベル（`nil` / `"none"` / `"low"` / `"medium"` / `"high"`） |
+| `verbose` | `false` | デバッグログを有効化 |
 
 ## 動作の詳細
 
@@ -62,4 +65,4 @@ require("lazyjp").setup({
 4. 変換結果が返ってきたら行が未編集であればローマ字行を日本語に置き換え
 5. 行を編集した場合 → 変換はキャンセルされ、ローマ字のまま残る
 
-コンテキストとして直前2つの変換済み結果が自動で渡されるため、文章の流れを維持した変換が行われる。
+コンテキストとして直前 `num_contexts` 個の変換済み結果が自動で渡されるため、文章の流れを維持した変換が行われる。

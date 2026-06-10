@@ -8,6 +8,8 @@ M.config = {
   languages = { "ja", "en", "zh" },
   verbose = false,
   keymap = "<C-j>",
+  num_contexts = 2,
+  reasoning_effort = nil,
 }
 
 -- pending[bufnr][lnum] = {hash, text}
@@ -35,7 +37,7 @@ end
 local function push_context(bufnr, text)
   local ctx = vim.b[bufnr].lazyjp_context or {}
   table.insert(ctx, text)
-  if #ctx > 2 then
+  if #ctx > M.config.num_contexts then
     table.remove(ctx, 1)
   end
   vim.b[bufnr].lazyjp_context = ctx
@@ -83,6 +85,10 @@ local function send_to_engine(bufnr, lnum, text)
   table.insert(cmd, table.concat(M.config.languages, ","))
   if M.config.verbose then
     table.insert(cmd, "--verbose")
+  end
+  if M.config.reasoning_effort then
+    table.insert(cmd, "--reasoning-effort")
+    table.insert(cmd, M.config.reasoning_effort)
   end
   for _, ctx in ipairs(get_context(bufnr)) do
     table.insert(cmd, "--context")

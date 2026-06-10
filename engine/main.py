@@ -191,6 +191,7 @@ def _llm_convert(
     languages: list[str],
     context: list[str],
     llm_config: dict,
+    reasoning_effort: str | None = None,
 ) -> str:
     system_prompt = _build_system_prompt(style, languages)
     messages = [{"role": "system", "content": system_prompt}]
@@ -215,8 +216,9 @@ def _llm_convert(
     cfg = llm_config
     model = f"{cfg['provider']}/{cfg['model']}"
     extra: dict = {}
-    if cfg.get("reasoning_effort"):
-        extra["reasoning_effort"] = cfg["reasoning_effort"]
+    effective_reasoning = reasoning_effort or cfg.get("reasoning_effort")
+    if effective_reasoning and effective_reasoning != "none":
+        extra["reasoning_effort"] = effective_reasoning
 
     result = completion(model=model, messages=messages, **extra)
     return result.choices[0].message.content.strip()
@@ -235,9 +237,21 @@ def cli():
 @click.option("--languages", default="ja,en,zh", show_default=True, help="カンマ区切り")
 @click.option("--context", multiple=True, help="直前の変換結果（複数回指定可）")
 @click.option(
+    "--reasoning-effort",
+    default=None,
+    type=click.Choice(["none", "low", "medium", "high"]),
+    help="推論レベル",
+)
+@click.option(
     "--verbose", "-v", is_flag=True, default=False, help="詳細ログを stderr に出力"
 )
-def convert(style: str, languages: str, context: tuple[str, ...], verbose: bool):
+def convert(
+    style: str,
+    languages: str,
+    context: tuple[str, ...],
+    reasoning_effort: str | None,
+    verbose: bool,
+):
     """input_text を stdin から読み取り、変換結果を stdout に出力する。"""
 
     def log(msg: str):
@@ -270,7 +284,7 @@ def convert(style: str, languages: str, context: tuple[str, ...], verbose: bool)
     try:
         llm_config = _load_llm_config()
         log(f"llm config: {llm_config.get('provider')}/{llm_config.get('model')}")
-        result = _llm_convert(input_text, style, lang_list, list(context), llm_config)
+        result = _llm_convert(input_text, style, lang_list, list(context), llm_config, reasoning_effort)
     except Exception as e:
         db.close()
         click.echo(f"LLM error: {e}", err=True)
