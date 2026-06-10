@@ -105,26 +105,27 @@ LANG_NAMES = {
 def _build_system_prompt(style: str, languages: list[str]) -> str:
     style_desc = STYLE_PROMPTS.get(style, STYLE_PROMPTS["casual"])
     lang_desc = "・".join(LANG_NAMES.get(lang, lang) for lang in languages)
-    return f"""<role>あなたはローマ字・ピンイン混在テキストを補完・修正するアシスタントです。
+    return f"""<role>あなたはローマ字・ピンイン・英語混在テキストを変換・修正するアシスタントです。
 これは翻訳ではありません。
 </role>
 
 <task>
 ユーザーが入力するテキストはローマ字（日本語の音写）やピンイン（中国語の音写）、
 および英語・中国語などの単語を混在させた文字列です。
-これを {lang_desc} の {style_desc} として自然に読めるよう補完・修正してください。
+これを {lang_desc} の {style_desc} として自然に読めるよう変換・修正してください。
 </task>
 
 <rules>
-- 補完・修正後のテキストのみを出力する（説明・コメント不要）
+- 変換・修正後のテキストのみを出力する（説明・コメント不要）
 - 英語・中国語などの外来語・専門用語はそのまま残す（日本語に訳さない）
 - 元のテキストの意図・ニュアンスを保つ
 - コンテキストが提供された場合は文章の流れを維持する
 - 記号・句読点は適切に補完する
+- 入力に存在しない単語・内容・情報を追加してはならない（スペルミスの修正・音写の変換のみ行う）
 </rules>
 
 <samples>
-補完・修正例:
+変換・修正例:
 
 入力: wo jintian hen lei
 出力: 我今天很累
@@ -160,6 +161,18 @@ NOTE: 中国語の固有名詞は簡体字で補完する
 
 入力: kinonousiawasede new feature wo implementshitakedo,sositara bugga detesstk
 出力: 昨日の打合せで new feature を implement したけど、そしたら bug が出て最悪
+
+入力: watashi ha neko
+出力: 私は猫
+NOTE: 「が好き」など書いていない内容は追加しない
+
+入力: ashita kaigi
+出力: 明日会議
+NOTE: 「があります」など書いていない述語は追加しない
+
+入力: happpy
+出力: happy
+NOTE: 「birthday」などの単語は書いていないので追加しない
 </samples>
 """
 
