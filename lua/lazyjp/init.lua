@@ -7,6 +7,7 @@ M.config = {
   style = "casual",
   languages = { "ja", "en", "zh" },
   verbose = false,
+  keymap = "<C-j>",
 }
 
 -- pending[bufnr][lnum] = {hash, text}
@@ -14,6 +15,9 @@ local pending = {}
 
 -- log entries
 local logs = {}
+
+-- lazyjp mode active buffers
+local mode_bufs = {}
 
 local function log_append(msg)
   local ts = os.date("%H:%M:%S")
@@ -175,6 +179,24 @@ function M.info()
   vim.keymap.set("n", "q", "<cmd>close<CR>", { buffer = buf, silent = true })
 end
 
+function M.start(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if mode_bufs[bufnr] then return end
+  mode_bufs[bufnr] = true
+  vim.keymap.set("i", "<CR>", M.trigger, { buffer = bufnr, desc = "LazyJP: convert on Enter" })
+  log_append(string.format("mode started buf=%d", bufnr))
+  vim.notify("[LazyJP] mode started", vim.log.levels.INFO)
+end
+
+function M.stop(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not mode_bufs[bufnr] then return end
+  mode_bufs[bufnr] = nil
+  pcall(vim.keymap.del, "i", "<CR>", { buffer = bufnr })
+  log_append(string.format("mode stopped buf=%d", bufnr))
+  vim.notify("[LazyJP] mode stopped", vim.log.levels.INFO)
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 
@@ -184,8 +206,10 @@ function M.setup(opts)
     end,
   })
 
-  vim.keymap.set("i", "<C-j>", M.trigger, { desc = "LazyJP: convert current line" })
-  vim.api.nvim_create_user_command("LazyjpInfo", function() M.info() end, { desc = "LazyJP: show log" })
+  vim.keymap.set("i", M.config.keymap, M.trigger, { desc = "LazyJP: convert current line" })
+  vim.api.nvim_create_user_command("LazyJpInfo", function() M.info() end, { desc = "LazyJP: show log" })
+  vim.api.nvim_create_user_command("LazyJpStart", function() M.start() end, { desc = "LazyJP: start persistent mode" })
+  vim.api.nvim_create_user_command("LazyJpStop", function() M.stop() end, { desc = "LazyJP: stop persistent mode" })
 end
 
 return M

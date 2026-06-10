@@ -49,10 +49,9 @@ require("lazyjp").setup({
 デフォルトのトリガーは `Ctrl+j`（Insert モード）。変更したい場合：
 
 ```lua
-require("lazyjp").setup({})
-vim.keymap.set("i", "<C-j>", function()
-  require("lazyjp").trigger()
-end)
+require("lazyjp").setup({
+  keymap = "<C-k>",  -- デフォルトは "<C-j>"
+})
 ```
 
 ## 動作の詳細
