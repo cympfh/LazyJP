@@ -12,7 +12,7 @@ M.config = {
   reasoning_effort = nil,
 }
 
--- pending[bufnr][lnum] = {hash, text}
+-- pending[bufnr][hash] = count
 local pending = {}
 
 -- log entries
@@ -43,36 +43,41 @@ local function push_context(bufnr, text)
   vim.b[bufnr].lazyjp_context = ctx
 end
 
-local function cancel_pending(bufnr, lnum)
+local function cancel_pending(bufnr, hash)
   if pending[bufnr] then
-    pending[bufnr][lnum] = nil
+    local cnt = pending[bufnr][hash]
+    if cnt and cnt > 1 then
+      pending[bufnr][hash] = cnt - 1
+    else
+      pending[bufnr][hash] = nil
+    end
   end
 end
 
-local function on_convert_result(bufnr, lnum, original_hash, result_text)
-  local p = pending[bufnr] and pending[bufnr][lnum]
-  if not p or p.hash ~= original_hash then
-    log_append(string.format("cancel lnum=%d (hash mismatch or already done)", lnum))
+local function on_convert_result(bufnr, original_text, original_hash, result_text)
+  if not (pending[bufnr] and pending[bufnr][original_hash]) then
+    log_append(string.format("cancel (not pending): %s", original_text))
     return
   end
-  cancel_pending(bufnr, lnum)
+  cancel_pending(bufnr, original_hash)
 
-  local current = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
-  if not current or line_hash(current) ~= original_hash then
-    log_append(string.format("cancel lnum=%d (line edited)", lnum))
-    return
+  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for i, line in ipairs(all_lines) do
+    if line == original_text then
+      vim.api.nvim_buf_set_lines(bufnr, i - 1, i, false, { result_text })
+      push_context(bufnr, result_text)
+      log_append(string.format("converted lnum=%d => %s", i, result_text))
+      return
+    end
   end
-
-  vim.api.nvim_buf_set_lines(bufnr, lnum - 1, lnum, false, { result_text })
-  push_context(bufnr, result_text)
-  log_append(string.format("converted lnum=%d => %s", lnum, result_text))
+  log_append(string.format("cancel (line not found): %s", original_text))
 end
 
-local function send_to_engine(bufnr, lnum, text)
+local function send_to_engine(bufnr, text)
   local hash = line_hash(text)
   pending[bufnr] = pending[bufnr] or {}
-  pending[bufnr][lnum] = { hash = hash, text = text }
-  log_append(string.format("request lnum=%d: %s", lnum, text))
+  pending[bufnr][hash] = (pending[bufnr][hash] or 0) + 1
+  log_append(string.format("request: %s", text))
 
   local cmd = {}
   for _, v in ipairs(M.config.cmd) do
@@ -101,7 +106,7 @@ local function send_to_engine(bufnr, lnum, text)
       local result = table.concat(data, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
       if result == "" then return end
       vim.schedule(function()
-        on_convert_result(bufnr, lnum, hash, result)
+        on_convert_result(bufnr, text, hash, result)
       end)
     end,
     on_stderr = function(_, data)
@@ -140,24 +145,10 @@ function M.trigger()
   end
 
   if line ~= "" then
-    send_to_engine(bufnr, lnum, line)
+    send_to_engine(bufnr, line)
   end
 end
 
-local function watch_changes(bufnr)
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-    buffer = bufnr,
-    callback = function()
-      if not pending[bufnr] then return end
-      for lnum, p in pairs(pending[bufnr]) do
-        local current = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
-        if current == nil or line_hash(current) ~= p.hash then
-          cancel_pending(bufnr, lnum)
-        end
-      end
-    end,
-  })
-end
 
 function M.info()
   local lines = vim.list_extend({ "LazyJP log:" }, logs)
@@ -205,12 +196,6 @@ end
 
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
-
-  vim.api.nvim_create_autocmd("BufEnter", {
-    callback = function(ev)
-      watch_changes(ev.buf)
-    end,
-  })
 
   vim.keymap.set("i", M.config.keymap, M.trigger, { desc = "LazyJP: convert current line" })
   vim.api.nvim_create_user_command("LazyJpInfo", function() M.info() end, { desc = "LazyJP: show log" })

@@ -1,12 +1,9 @@
-import hashlib
-import json
-import os
-import sqlite3
-import subprocess
 import sys
 
 import click
 from litellm import completion
+import subprocess
+import json
 
 __version__ = "0.1.0"
 
@@ -16,76 +13,6 @@ __version__ = "0.1.0"
 def _load_llm_config() -> dict:
     result = subprocess.run(["llm-config", "-r", "none"], capture_output=True)
     return json.loads(result.stdout.decode())
-
-
-# ---- SQLite cache ----
-
-DB_PATH = os.environ.get(
-    "LAZYJP_CACHE_DB", os.path.expanduser("~/.cache/lazyjp/cache.db")
-)
-
-
-def _init_db(conn: sqlite3.Connection):
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS conversion_cache (
-            cache_key    TEXT PRIMARY KEY,
-            input_text   TEXT NOT NULL,
-            style_hash   TEXT NOT NULL,
-            language_decl TEXT NOT NULL,
-            result_text  TEXT NOT NULL,
-            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-
-
-def get_db() -> sqlite3.Connection:
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    db = sqlite3.connect(DB_PATH)
-    _init_db(db)
-    return db
-
-
-def _cache_key(input_text: str, style_hash: str, language_decl: str) -> str:
-    raw = f"{input_text}\x00{style_hash}\x00{language_decl}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
-def cache_get(db: sqlite3.Connection, cache_key: str) -> str | None:
-    row = db.execute(
-        "SELECT result_text FROM conversion_cache WHERE cache_key = ?",
-        (cache_key,),
-    ).fetchone()
-    if row:
-        db.execute(
-            "UPDATE conversion_cache SET last_used_at = CURRENT_TIMESTAMP WHERE cache_key = ?",
-            (cache_key,),
-        )
-        db.commit()
-        return row[0]
-    return None
-
-
-def cache_set(
-    db: sqlite3.Connection,
-    cache_key: str,
-    input_text: str,
-    style_hash: str,
-    language_decl: str,
-    result_text: str,
-):
-    db.execute(
-        """
-        INSERT OR REPLACE INTO conversion_cache
-            (cache_key, input_text, style_hash, language_decl, result_text)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (cache_key, input_text, style_hash, language_decl, result_text),
-    )
-    db.commit()
 
 
 # ---- Prompt ----
@@ -177,11 +104,6 @@ NOTE: 「birthday」などの単語は書いていないので追加しない
 """
 
 
-def _style_hash(style: str, languages: list[str]) -> str:
-    prompt = _build_system_prompt(style, languages)
-    return hashlib.sha256(prompt.encode()).hexdigest()[:16]
-
-
 # ---- LLM call ----
 
 
@@ -268,31 +190,15 @@ def convert(
         click.echo(input_text, nl=False)
         return
 
-    db = get_db()
-    sh = _style_hash(style, lang_list)
-    lang_decl = ",".join(sorted(lang_list))
-    key = _cache_key(input_text.strip(), sh, lang_decl)
-
-    cached = cache_get(db, key)
-    if cached is not None:
-        db.close()
-        log(f"cache hit => {cached!r}")
-        click.echo(cached)
-        return
-
-    log("cache miss, calling LLM...")
     try:
         llm_config = _load_llm_config()
         log(f"llm config: {llm_config.get('provider')}/{llm_config.get('model')}")
         result = _llm_convert(input_text, style, lang_list, list(context), llm_config, reasoning_effort)
     except Exception as e:
-        db.close()
         click.echo(f"LLM error: {e}", err=True)
         sys.exit(1)
 
     log(f"result: {result!r}")
-    cache_set(db, key, input_text.strip(), sh, lang_decl, result)
-    db.close()
     click.echo(result)
 
 
@@ -300,16 +206,6 @@ def convert(
 def version():
     """バージョンを表示する。"""
     click.echo(__version__)
-
-
-@cli.command()
-def clear():
-    """キャッシュ DB を削除する。"""
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-        click.echo(f"Removed: {DB_PATH}")
-    else:
-        click.echo(f"Not found: {DB_PATH}")
 
 
 if __name__ == "__main__":
